@@ -3,7 +3,7 @@ import argparse
 
 def info():
     print("Hello from rovi-control-board!")
-    bot = Rosmaster(com="/dev/ttyUSB0")
+    bot = Rosmaster(com="/dev/my_ros_board")
     bot.create_receive_threading()
     version = bot.get_version()
     print(f"Version: {version}")
@@ -25,7 +25,7 @@ def cli():
 def main():
     args = cli()
     if args.command == "help":
-        bot = Rosmaster(com="/dev/ttyUSB0")
+        bot = Rosmaster(com="/dev/my_ros_board")
         help(bot)
         del bot
         return
