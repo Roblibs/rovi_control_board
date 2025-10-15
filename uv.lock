@@ -14,7 +14,7 @@ wheels = [
 [[package]]
 name = "rosmaster-lib"
 version = "3.3.9"
-source = { git = "https://github.com/RobLibs/Rosmaster_Lib?rev=V3.3.9#3edfaa93f9a3d2736719ff691c18b7841f9a7834" }
+source = { git = "https://github.com/RobLibs/Rosmaster_Lib#b79967c3c8f729c365d579387a75eac7fd32b7b1" }
 dependencies = [
     { name = "pyserial" },
 ]
@@ -31,5 +31,5 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "pyserial", specifier = ">=3.5" },
-    { name = "rosmaster-lib", git = "https://github.com/RobLibs/Rosmaster_Lib?rev=V3.3.9" },
+    { name = "rosmaster-lib", git = "https://github.com/RobLibs/Rosmaster_Lib" },
 ]
