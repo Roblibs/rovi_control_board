@@ -1,3 +1,4 @@
+import os
 from Rosmaster_Lib import Rosmaster
 import argparse
 import time
@@ -193,6 +194,49 @@ def set_car_motion(velocity):
 
     del bot
 
+def set_car_joystick():
+    print("Hello from rovi-control-board in car joystick mode!")
+    if "DISPLAY" not in os.environ:
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        os.environ.setdefault("SDL_AUDIODRIVER", "dummy")  # optional: silence ALSA errors
+    import pygame
+    pygame.init()
+    pygame.joystick.init()
+
+    j = pygame.joystick.Joystick(0)
+    j.init()
+    print("Joystick name:", j.get_name())
+
+    bot = Rosmaster(com="/dev/my_ros_board")
+    bot.create_receive_threading()
+
+    voltage = bot.get_battery_voltage()
+    print(f"Battery voltage: {voltage}V")
+
+    try:
+        while True:
+            vx = 0
+            vy = 0
+            vz = 0
+            for event in pygame.event.get():
+                if (event.type == pygame.JOYAXISMOTION):
+                    if abs(event.value) < 0.02:
+                        event.value = 0
+                    if event.axis == 4:  # Y-axis for forward/backward m/s
+                        vy = event.value * 0.7
+                    if event.axis == 3:  # X-axis for left/right m/s
+                        vx = event.value * 0.7
+                    if event.axis == 0:  # Z-axis for rotation rads/s
+                        vz = event.value * 3.2
+            bot.set_car_motion(vx, vy, vz)
+            print(f"left/right vx: {vx} m/s, forward/backward vy: {vy} m/s, rotation vz: {vz} rads/s")
+            pygame.time.delay(200)
+    except KeyboardInterrupt:
+        print("Exiting joystick control...")
+    finally:
+        bot.set_car_motion(0, 0, 0)
+        del bot
+
 def main():
     args = cli()
     if args.command == "help":
@@ -216,6 +260,8 @@ def main():
         set_car_run(args.speed)
     if args.command == "motion":
         set_car_motion(0.2)
+    if args.command == "js":
+        set_car_joystick()
 
 if __name__ == "__main__":
     main()

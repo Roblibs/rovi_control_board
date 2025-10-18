@@ -18,3 +18,24 @@ the run
 ```shell
 uv run main.py
 ```
+
+joystick discovery
+```shell
+sudo apt update
+sudo apt install bluetooth bluez bluez-tools python3-evdev
+bluetoothctl
+#> power on
+#> agent on
+#> default-agent
+#> scan on
+#> [NEW] Device XX:XX:XX:XX:XX:XX Wireless Controller
+#> pair XX:XX:XX:XX:XX:XX
+#> trust XX:XX:XX:XX:XX:XX
+#> connect XX:XX:XX:XX:XX:XX
+#> quit
+ls /dev/input/
+sudo apt install joystick
+jstest /dev/input/js0
+
+sudo apt install python3-pygame
+```
