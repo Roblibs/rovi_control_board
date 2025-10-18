@@ -214,20 +214,20 @@ def set_car_joystick():
     print(f"Battery voltage: {voltage}V")
 
     try:
+        vx = 0
+        vy = 0
+        vz = 0
         while True:
-            vx = 0
-            vy = 0
-            vz = 0
             for event in pygame.event.get():
                 if (event.type == pygame.JOYAXISMOTION):
                     if abs(event.value) < 0.02:
                         event.value = 0
                     if event.axis == 4:  # Y-axis for forward/backward m/s
                         vy = event.value * 0.7
-                    if event.axis == 3:  # X-axis for left/right m/s
+                    if event.axis == 0:  # X-axis for left/right m/s
                         vx = event.value * 0.7
-                    if event.axis == 0:  # Z-axis for rotation rads/s
-                        vz = event.value * 3.2
+                    if event.axis == 3:  # Z-axis for rotation rads/s
+                        vz = event.value * (-3.2)
             bot.set_car_motion(vx, vy, vz)
             print(f"left/right vx: {vx} m/s, forward/backward vy: {vy} m/s, rotation vz: {vz} rads/s")
             pygame.time.delay(200)
