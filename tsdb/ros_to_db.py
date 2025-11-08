@@ -8,8 +8,15 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from geometry_msgs.msg import Twist
+from std_msgs.msg import Float32
+from sensor_msgs.msg import Imu, MagneticField
 
-import influx2_client as influx
+try:
+    # If used as a package/module
+    from . import influx2_client as influx
+except Exception:
+    # If run as a plain script from this folder
+    import influx2_client as influx
 
 
 def post_twist(msg: Twist, measurement: str = "vel_raw", extra_tags: Optional[Dict[str, str]] = None) -> None:
@@ -30,7 +37,7 @@ def post_twist(msg: Twist, measurement: str = "vel_raw", extra_tags: Optional[Di
     # Basic default tags
     tags = {
         "host": socket.gethostname(),
-        "topic": "vel_raw",
+        "topic": "vel_raw",  # can be overridden via extra_tags
     }
     if extra_tags:
         tags.update({k: str(v) for k, v in extra_tags.items()})
@@ -38,26 +45,101 @@ def post_twist(msg: Twist, measurement: str = "vel_raw", extra_tags: Optional[Di
     influx.write_measurement(measurement=measurement, fields=fields, tags=tags)
 
 
+def post_float32(msg: Float32, measurement: str, topic_name: str) -> None:
+    fields = {"value": float(msg.data)}
+    tags = {"host": socket.gethostname(), "topic": topic_name}
+    influx.write_measurement(measurement=measurement, fields=fields, tags=tags)
+
+
+def post_imu(msg: Imu, measurement: str = "imu_data_raw") -> None:
+    fields = {
+        "linear_accel_x": float(msg.linear_acceleration.x),
+        "linear_accel_y": float(msg.linear_acceleration.y),
+        "linear_accel_z": float(msg.linear_acceleration.z),
+        "angular_vel_x": float(msg.angular_velocity.x),
+        "angular_vel_y": float(msg.angular_velocity.y),
+        "angular_vel_z": float(msg.angular_velocity.z),
+    }
+    tags = {
+        "host": socket.gethostname(),
+        "topic": "/imu/data_raw",
+        "frame_id": getattr(msg.header, "frame_id", ""),
+    }
+    influx.write_measurement(measurement=measurement, fields=fields, tags=tags)
+
+
+def post_magnetic_field(msg: MagneticField, measurement: str = "imu_mag") -> None:
+    fields = {
+        "mag_x": float(msg.magnetic_field.x),
+        "mag_y": float(msg.magnetic_field.y),
+        "mag_z": float(msg.magnetic_field.z),
+    }
+    tags = {
+        "host": socket.gethostname(),
+        "topic": "/imu/mag",
+        "frame_id": getattr(msg.header, "frame_id", ""),
+    }
+    influx.write_measurement(measurement=measurement, fields=fields, tags=tags)
+
+
 class TSDBLoggerNode(Node):
-    """ROS2 node that subscribes to /vel_raw and stores Twist into InfluxDB."""
+    """ROS2 node that logs multiple topics into InfluxDB.
+
+    Subscribes: cmd_vel, vel_raw, edition, voltage, /imu/data_raw, /imu/mag
+    """
 
     def __init__(self) -> None:
         super().__init__("tsdb_logger")
 
-        # Optional: allow overriding topic/measurement via environment
-        self.topic = os.getenv("VEL_RAW_TOPIC", "vel_raw")
-        self.measurement = os.getenv("VEL_RAW_MEASUREMENT", "vel_raw")
+        # QoS: match driver_node.py
+        qos_cmd = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE)
+        qos_imu = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.BEST_EFFORT)
 
-        qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.BEST_EFFORT)
-        self.sub = self.create_subscription(Twist, self.topic, self._on_vel_raw, qos)
-        self.get_logger().info(f"Subscribed to '{self.topic}' and logging to measurement '{self.measurement}'")
+        # Subscriptions
+        self.sub_cmd_vel = self.create_subscription(Twist, "cmd_vel", self._on_cmd_vel, qos_cmd)
+        self.sub_vel_raw = self.create_subscription(Twist, "vel_raw", self._on_vel_raw, qos_imu)
+        self.sub_edition = self.create_subscription(Float32, "edition", self._on_edition, qos_imu)
+        self.sub_voltage = self.create_subscription(Float32, "voltage", self._on_voltage, qos_imu)
+        self.sub_imu_raw = self.create_subscription(Imu, "/imu/data_raw", self._on_imu_raw, qos_imu)
+        self.sub_mag = self.create_subscription(MagneticField, "/imu/mag", self._on_mag, qos_imu)
+
+        self.get_logger().info("TSDB logger subscribed to: cmd_vel, vel_raw, edition, voltage, /imu/data_raw, /imu/mag")
+
+    def _on_cmd_vel(self, msg: Twist) -> None:
+        try:
+            post_twist(msg, measurement="cmd_vel", extra_tags={"topic": "cmd_vel"})
+        except Exception as e:
+            self.get_logger().warn(f"Failed to write cmd_vel: {e}")
 
     def _on_vel_raw(self, msg: Twist) -> None:
         try:
-            post_twist(msg, measurement=self.measurement)
+            post_twist(msg, measurement="vel_raw", extra_tags={"topic": "vel_raw"})
         except Exception as e:
-            # Avoid spamming logs; use throttle if available; here, log warn
-            self.get_logger().warn(f"Failed to write Twist to InfluxDB: {e}")
+            self.get_logger().warn(f"Failed to write vel_raw: {e}")
+
+    def _on_edition(self, msg: Float32) -> None:
+        try:
+            post_float32(msg, measurement="edition", topic_name="edition")
+        except Exception as e:
+            self.get_logger().warn(f"Failed to write edition: {e}")
+
+    def _on_voltage(self, msg: Float32) -> None:
+        try:
+            post_float32(msg, measurement="voltage", topic_name="voltage")
+        except Exception as e:
+            self.get_logger().warn(f"Failed to write voltage: {e}")
+
+    def _on_imu_raw(self, msg: Imu) -> None:
+        try:
+            post_imu(msg, measurement="imu_data_raw")
+        except Exception as e:
+            self.get_logger().warn(f"Failed to write imu/data_raw: {e}")
+
+    def _on_mag(self, msg: MagneticField) -> None:
+        try:
+            post_magnetic_field(msg, measurement="imu_mag")
+        except Exception as e:
+            self.get_logger().warn(f"Failed to write imu/mag: {e}")
 
 
 def main() -> None:
