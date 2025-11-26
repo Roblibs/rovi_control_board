@@ -39,3 +39,10 @@ jstest /dev/input/js0
 
 sudo apt install python3-pygame
 ```
+
+# Influx Time series db
+subscribe to topics and post on influxdb
+
+```shell
+uv run tsdb/ros_to_db.py
+```
