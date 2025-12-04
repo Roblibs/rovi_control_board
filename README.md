@@ -46,3 +46,14 @@ subscribe to topics and post on influxdb
 ```shell
 uv run tsdb/ros_to_db.py
 ```
+
+# Battery voltage
+
+| State                                  | Per-cell Voltage | Total (3S) Voltage |
+|----------------------------------------|------------------|--------------------|
+| Fully charged (max safe)              | 4.20 V       | 12.60 V        |
+| Nominal / mid-charge                  | 3.70 V       | 11.10 V        |
+| Recommended recharge point (~20% left)| 3.65–3.70 V  | ≈ 10.95–11.10 V|
+| Low but safe                          | 3.50 V       | 10.50 V        |
+| Critical / don’t go below             | 3.00 V       | 9.00 V         |
+
