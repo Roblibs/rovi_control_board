@@ -8,6 +8,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 from std_msgs.msg import Float32
 from sensor_msgs.msg import Imu, MagneticField
 
@@ -82,6 +83,31 @@ def post_magnetic_field(msg: MagneticField, measurement: str = "imu_mag") -> Non
     influx.write_measurement(measurement=measurement, fields=fields, tags=tags)
 
 
+def post_odom(msg: Odometry, measurement: str = "odom_raw") -> None:
+    fields = {
+        "pos_x": float(msg.pose.pose.position.x),
+        "pos_y": float(msg.pose.pose.position.y),
+        "pos_z": float(msg.pose.pose.position.z),
+        "orient_x": float(msg.pose.pose.orientation.x),
+        "orient_y": float(msg.pose.pose.orientation.y),
+        "orient_z": float(msg.pose.pose.orientation.z),
+        "orient_w": float(msg.pose.pose.orientation.w),
+        "twist_lin_x": float(msg.twist.twist.linear.x),
+        "twist_lin_y": float(msg.twist.twist.linear.y),
+        "twist_lin_z": float(msg.twist.twist.linear.z),
+        "twist_ang_x": float(msg.twist.twist.angular.x),
+        "twist_ang_y": float(msg.twist.twist.angular.y),
+        "twist_ang_z": float(msg.twist.twist.angular.z),
+    }
+    tags = {
+        "host": socket.gethostname(),
+        "topic": "odom_raw",
+        "frame_id": getattr(msg.header, "frame_id", ""),
+        "child_frame_id": getattr(msg, "child_frame_id", ""),
+    }
+    influx.write_measurement(measurement=measurement, fields=fields, tags=tags)
+
+
 class TSDBLoggerNode(Node):
     """ROS2 node that logs multiple topics into InfluxDB.
 
@@ -94,6 +120,7 @@ class TSDBLoggerNode(Node):
         # QoS: match driver_node.py
         qos_cmd = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE)
         qos_imu = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.BEST_EFFORT)
+        qos_odom = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE)
 
         # Subscriptions
         self.sub_cmd_vel = self.create_subscription(Twist, "cmd_vel", self._on_cmd_vel, qos_cmd)
@@ -102,8 +129,9 @@ class TSDBLoggerNode(Node):
         self.sub_voltage = self.create_subscription(Float32, "voltage", self._on_voltage, qos_imu)
         self.sub_imu_raw = self.create_subscription(Imu, "/imu/data_raw", self._on_imu_raw, qos_imu)
         self.sub_mag = self.create_subscription(MagneticField, "/imu/mag", self._on_mag, qos_imu)
+        self.sub_odom = self.create_subscription(Odometry, "odom_raw", self._on_odom_raw, qos_odom)
 
-        self.get_logger().info("TSDB logger subscribed to: cmd_vel, vel_raw, edition, voltage, /imu/data_raw, /imu/mag")
+        self.get_logger().info("TSDB logger subscribed to: cmd_vel, vel_raw, odom_raw, edition, voltage, /imu/data_raw, /imu/mag")
 
     def _on_cmd_vel(self, msg: Twist) -> None:
         try:
@@ -140,6 +168,12 @@ class TSDBLoggerNode(Node):
             post_magnetic_field(msg, measurement="imu_mag")
         except Exception as e:
             self.get_logger().warn(f"Failed to write imu/mag: {e}")
+
+    def _on_odom_raw(self, msg: Odometry) -> None:
+        try:
+            post_odom(msg, measurement="odom_raw")
+        except Exception as e:
+            self.get_logger().warn(f"Failed to write odom_raw: {e}")
 
 
 def main() -> None:
