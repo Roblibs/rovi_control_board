@@ -234,7 +234,8 @@ def set_car_joystick():
         while True:
             vx, vy, vz = event_to_motion(pygame, vx, vy, vz)
             bot.set_car_motion(vx, vy, vz)
-            print(f"left/right vx: {vx} m/s, forward/backward vy: {vy} m/s, rotation vz: {vz} rads/s")
+            mx, my, mz = bot.get_motion_data()
+            print(f"left/right vx: {vx}/{mx} m/s, forward/backward vy: {vy}/{my} m/s, rotation vz: {vz}/{mz} rads/s")
             pygame.time.delay(200)
     except KeyboardInterrupt:
         print("Exiting joystick control...")
