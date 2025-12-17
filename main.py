@@ -2,6 +2,7 @@ import os
 from Rosmaster_Lib import Rosmaster
 import argparse
 import time
+import csv
 
 def info():
     print("Hello from rovi-control-board!")
@@ -194,6 +195,19 @@ def set_car_motion(velocity):
 
     del bot
 
+def event_to_motion(pygame, vx, vy, vz):
+    for event in pygame.event.get():
+        if (event.type == pygame.JOYAXISMOTION):
+            if abs(event.value) < 0.04:
+                event.value = 0
+            if event.axis == 4:  # Y-axis for forward/backward m/s
+                vy = event.value * 0.7
+            if event.axis == 3:  # Z-axis for rotation rads/s
+                vx = event.value * (3.2)
+            if event.axis == 0:  # X-axis for left/right m/s
+                vz = event.value * (-0.7)
+    return vx, vy, vz
+
 def set_car_joystick():
     print("Hello from rovi-control-board in car joystick mode!")
     if "DISPLAY" not in os.environ:
@@ -218,18 +232,50 @@ def set_car_joystick():
         vy = 0
         vz = 0
         while True:
-            for event in pygame.event.get():
-                if (event.type == pygame.JOYAXISMOTION):
-                    if abs(event.value) < 0.02:
-                        event.value = 0
-                    if event.axis == 4:  # Y-axis for forward/backward m/s
-                        vy = event.value * 0.7
-                    if event.axis == 0:  # X-axis for left/right m/s
-                        vx = event.value * 0.7
-                    if event.axis == 3:  # Z-axis for rotation rads/s
-                        vz = event.value * (-3.2)
+            vx, vy, vz = event_to_motion(pygame, vx, vy, vz)
             bot.set_car_motion(vx, vy, vz)
             print(f"left/right vx: {vx} m/s, forward/backward vy: {vy} m/s, rotation vz: {vz} rads/s")
+            pygame.time.delay(200)
+    except KeyboardInterrupt:
+        print("Exiting joystick control...")
+    finally:
+        bot.set_car_motion(0, 0, 0)
+        del bot
+
+def move_js_report_imu():
+    print("Hello from rovi-control-board in car joystick mode!")
+    if "DISPLAY" not in os.environ:
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        os.environ.setdefault("SDL_AUDIODRIVER", "dummy")  # optional: silence ALSA errors
+    import pygame
+    pygame.init()
+    pygame.joystick.init()
+
+    j = pygame.joystick.Joystick(0)
+    j.init()
+    print("Joystick name:", j.get_name())
+
+    bot = Rosmaster(com="/dev/my_ros_board")
+    bot.create_receive_threading()
+
+    try:
+        vx = 0
+        vy = 0
+        vz = 0
+        while True:
+            vx, vy, vz = event_to_motion(pygame, vx, vy, vz)
+            bot.set_car_motion(vx, vy, vz)
+            ax, ay, az = bot.get_accelerometer_data()
+            gx, gy, gz = bot.get_gyroscope_data()
+            print(f"vx: {vx} m/s, vy: {vy} m/s, wz: {vz} rads/s, accelerometer: ({ax}, {ay}, {az}), gyroscope: ({gx}, {gy}, {gz})")
+            file_exists = os.path.exists("imu.csv")
+            with open("imu.csv", "a", newline="") as f:
+                writer = csv.writer(f, delimiter=";")
+                if not file_exists:
+                    writer.writerow(["vx", "vy", "vz", "ax", "ay", "az", "gx", "gy", "gz"])
+                ax, ay, az = ax, -ay, -az   # Fix flipped sensor downwards
+                gx, gy, gz = gx, -gy, -gz
+                writer.writerow([vx, vy, vz, ax, ay, az, gx, gy, gz])
             pygame.time.delay(200)
     except KeyboardInterrupt:
         print("Exiting joystick control...")
@@ -262,6 +308,8 @@ def main():
         set_car_motion(0.2)
     if args.command == "js":
         set_car_joystick()
+    if args.command == "imu":
+        move_js_report_imu()
 
 if __name__ == "__main__":
     main()
